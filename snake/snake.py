@@ -9,7 +9,7 @@ import os
 
 # Configuration
 GRID_SIZE = 10
-MODEL_PATH = 'dqn_snake_10x10.pth'
+MODEL_PATH = 'improved_dqn_snake_10x10.pth'
 CELL_SIZE = 40
 
 
@@ -27,6 +27,7 @@ class SnakeGame:
         self.score = 0
         self.steps_without_food = 0
         self.done = False
+        self.prev_distance = self._get_distance_to_food()
         return self.get_state()
 
     def _place_food(self):
@@ -36,46 +37,45 @@ class SnakeGame:
             if food not in self.snake:
                 return food
 
+    def _get_distance_to_food(self):
+        """Manhattan distance to food"""
+        head = self.snake[0]
+        return abs(head[0] - self.food[0]) + abs(head[1] - self.food[1])
+
     def get_state(self):
         """
-        State representation (11 features):
-        - Danger straight, right, left (3)
+        Enhanced state representation (16 features):
+        - Danger in 8 directions (8)
         - Current direction (4: up, down, left, right)
         - Food location relative (4: up, down, left, right)
         """
         head = self.snake[0]
 
-        # Possible directions
+        # Check danger in 8 directions
+        danger_up = self._is_collision((head[0] - 1, head[1]))
+        danger_down = self._is_collision((head[0] + 1, head[1]))
+        danger_left = self._is_collision((head[0], head[1] - 1))
+        danger_right = self._is_collision((head[0], head[1] + 1))
+        danger_up_left = self._is_collision((head[0] - 1, head[1] - 1))
+        danger_up_right = self._is_collision((head[0] - 1, head[1] + 1))
+        danger_down_left = self._is_collision((head[0] + 1, head[1] - 1))
+        danger_down_right = self._is_collision((head[0] + 1, head[1] + 1))
+
+        # Current direction
         dir_up = (self.direction == (-1, 0))
         dir_down = (self.direction == (1, 0))
         dir_left = (self.direction == (0, -1))
         dir_right = (self.direction == (0, 1))
 
-        # Check danger in 3 directions (straight, right, left)
-        danger_straight = self._is_collision(
-            (head[0] + self.direction[0], head[1] + self.direction[1])
-        )
-
-        # Right turn
-        right_dir = self._turn_right(self.direction)
-        danger_right = self._is_collision(
-            (head[0] + right_dir[0], head[1] + right_dir[1])
-        )
-
-        # Left turn
-        left_dir = self._turn_left(self.direction)
-        danger_left = self._is_collision(
-            (head[0] + left_dir[0], head[1] + left_dir[1])
-        )
-
-        # Food location
-        food_up = self.food[0] < head[0]
-        food_down = self.food[0] > head[0]
-        food_left = self.food[1] < head[1]
-        food_right = self.food[1] > head[1]
+        # Food location (normalized)
+        food_up = (self.food[0] < head[0])
+        food_down = (self.food[0] > head[0])
+        food_left = (self.food[1] < head[1])
+        food_right = (self.food[1] > head[1])
 
         state = [
-            danger_straight, danger_right, danger_left,
+            danger_up, danger_down, danger_left, danger_right,
+            danger_up_left, danger_up_right, danger_down_left, danger_down_right,
             dir_up, dir_down, dir_left, dir_right,
             food_up, food_down, food_left, food_right
         ]
@@ -110,7 +110,6 @@ class SnakeGame:
             self.direction = self._turn_right(self.direction)
         elif action == 2:  # Turn left
             self.direction = self._turn_left(self.direction)
-        # action == 0: continue straight
 
         # Move snake
         head = self.snake[0]
@@ -123,16 +122,27 @@ class SnakeGame:
 
         self.snake.insert(0, new_head)
 
+        # Calculate distance-based reward
+        current_distance = self._get_distance_to_food()
+
         # Check if food eaten
         reward = 0
         if new_head == self.food:
             self.score += 1
-            reward = 10  # Reward for eating food
+            reward = 10  # Large reward for eating food
             self.food = self._place_food()
             self.steps_without_food = 0
+            self.prev_distance = self._get_distance_to_food()
         else:
             self.snake.pop()  # Remove tail
-            reward = 0
+
+            # Reward shaping: encourage moving toward food
+            if current_distance < self.prev_distance:
+                reward = 1  # Moving closer to food
+            else:
+                reward = -1  # Moving away from food
+
+            self.prev_distance = current_distance
             self.steps_without_food += 1
 
         # Penalty for taking too long (prevent infinite loops)
@@ -144,21 +154,26 @@ class SnakeGame:
 
 
 class DQN(nn.Module):
-    def __init__(self, input_size=11, hidden_size=256, output_size=3):
+    def __init__(self, input_size=16, hidden_size=256, output_size=3):
         super(DQN, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, output_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size // 2)
+        self.fc4 = nn.Linear(hidden_size // 2, output_size)
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
+        x = self.dropout(x)
         x = torch.relu(self.fc2(x))
-        return self.fc3(x)
+        x = self.dropout(x)
+        x = torch.relu(self.fc3(x))
+        return self.fc4(x)
 
 
 class DQNAgent:
-    def __init__(self, state_size=11, action_size=3, learning_rate=0.001,
-                 gamma=0.95, epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01):
+    def __init__(self, state_size=16, action_size=3, learning_rate=0.0005,
+                 gamma=0.95, epsilon=1.0, epsilon_decay=0.9995, epsilon_min=0.01):
         self.state_size = state_size
         self.action_size = action_size
         self.memory = deque(maxlen=100000)
@@ -173,7 +188,7 @@ class DQNAgent:
         self.update_target_network()
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        self.criterion = nn.MSELoss()
+        self.criterion = nn.SmoothL1Loss()  # Huber loss - more stable
         self.update_counter = 0
 
     def update_target_network(self):
@@ -191,7 +206,7 @@ class DQNAgent:
             q_values = self.model(state_tensor)
         return torch.argmax(q_values).item()
 
-    def replay(self, batch_size=64):
+    def replay(self, batch_size=128):
         if len(self.memory) < batch_size:
             return
 
@@ -206,20 +221,23 @@ class DQNAgent:
         # Current Q values
         current_q = self.model(states).gather(1, actions.unsqueeze(1)).squeeze()
 
-        # Target Q values
+        # Double DQN: use main network to select action, target network to evaluate
         with torch.no_grad():
-            next_q = self.target_model(next_states).max(1)[0]
+            next_actions = self.model(next_states).max(1)[1]
+            next_q = self.target_model(next_states).gather(1, next_actions.unsqueeze(1)).squeeze()
             target_q = rewards + (1 - dones) * self.gamma * next_q
 
         loss = self.criterion(current_q, target_q)
 
         self.optimizer.zero_grad()
         loss.backward()
+        # Gradient clipping for stability
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
         self.optimizer.step()
 
         # Update target network periodically
         self.update_counter += 1
-        if self.update_counter % 1000 == 0:
+        if self.update_counter % 500 == 0:
             self.update_target_network()
 
     def decay_epsilon(self):
@@ -227,11 +245,12 @@ class DQNAgent:
             self.epsilon *= self.epsilon_decay
 
 
-def train_agent(env, agent, episodes=5000):
+def train_agent(env, agent, episodes=50000):
     scores = []
     best_score = 0
+    moving_avg_window = 100
 
-    print(f"Training for {episodes} episodes...")
+    print(f"Training for {episodes} episodes with improved rewards...")
 
     for episode in range(episodes):
         state = env.reset()
@@ -253,14 +272,16 @@ def train_agent(env, agent, episodes=5000):
             best_score = env.score
 
         if (episode + 1) % 100 == 0:
-            avg_score = np.mean(scores[-100:])
+            avg_score = np.mean(scores[-moving_avg_window:])
             print(f"Episode {episode + 1}/{episodes} | "
                   f"Score: {env.score} | "
-                  f"Avg(100): {avg_score:.2f} | "
+                  f"Avg({moving_avg_window}): {avg_score:.2f} | "
                   f"Best: {best_score} | "
                   f"ε: {agent.epsilon:.3f}")
 
     print(f"\nTraining complete! Best score: {best_score}")
+    final_avg = np.mean(scores[-100:])
+    print(f"Final 100-episode average: {final_avg:.2f}")
     return scores
 
 
@@ -269,7 +290,7 @@ class SnakeVisualizer(tk.Tk):
         super().__init__()
         self.env = env
         self.agent = agent
-        self.title("Snake Game - Deep Q-Learning")
+        self.title("Snake Game - Improved DQN")
 
         self.canvas = tk.Canvas(self, width=env.grid_size * CELL_SIZE,
                                 height=env.grid_size * CELL_SIZE, bg='black')
@@ -286,6 +307,10 @@ class SnakeVisualizer(tk.Tk):
         self.high_score_label = tk.Label(self.info_frame, text="Best: 0",
                                          font=("Arial", 14))
         self.high_score_label.pack(side=tk.LEFT, padx=10)
+
+        self.epsilon_label = tk.Label(self.info_frame, text=f"ε: {agent.epsilon:.3f}",
+                                      font=("Arial", 12))
+        self.epsilon_label.pack(side=tk.LEFT, padx=10)
 
         btn_frame = tk.Frame(self)
         btn_frame.pack()
@@ -315,6 +340,15 @@ class SnakeVisualizer(tk.Tk):
     def draw_game(self):
         self.canvas.delete("all")
 
+        # Draw grid
+        for i in range(self.env.grid_size + 1):
+            self.canvas.create_line(0, i * CELL_SIZE,
+                                    self.env.grid_size * CELL_SIZE, i * CELL_SIZE,
+                                    fill='#222222')
+            self.canvas.create_line(i * CELL_SIZE, 0,
+                                    i * CELL_SIZE, self.env.grid_size * CELL_SIZE,
+                                    fill='#222222')
+
         # Draw snake
         for i, (row, col) in enumerate(self.env.snake):
             x1 = col * CELL_SIZE
@@ -322,8 +356,16 @@ class SnakeVisualizer(tk.Tk):
             x2 = x1 + CELL_SIZE
             y2 = y1 + CELL_SIZE
 
-            color = "#00ff00" if i == 0 else "#00cc00"  # Head brighter
-            self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="#008800")
+            if i == 0:
+                # Head - brighter with eyes
+                self.canvas.create_rectangle(x1, y1, x2, y2, fill="#00ff00", outline="#00cc00", width=2)
+                # Eyes
+                eye_size = 4
+                self.canvas.create_oval(x1 + 10, y1 + 10, x1 + 10 + eye_size, y1 + 10 + eye_size, fill='black')
+                self.canvas.create_oval(x2 - 14, y1 + 10, x2 - 14 + eye_size, y1 + 10 + eye_size, fill='black')
+            else:
+                # Body
+                self.canvas.create_rectangle(x1 + 2, y1 + 2, x2 - 2, y2 - 2, fill="#00cc00", outline="#008800")
 
         # Draw food
         food_row, food_col = self.env.food
@@ -331,9 +373,10 @@ class SnakeVisualizer(tk.Tk):
         y1 = food_row * CELL_SIZE
         x2 = x1 + CELL_SIZE
         y2 = y1 + CELL_SIZE
-        self.canvas.create_oval(x1 + 2, y1 + 2, x2 - 2, y2 - 2, fill="red", outline="darkred", width=2)
+        self.canvas.create_oval(x1 + 5, y1 + 5, x2 - 5, y2 - 5, fill="red", outline="darkred", width=2)
 
         self.score_label.config(text=f"Score: {self.env.score}")
+        self.epsilon_label.config(text=f"ε: {self.agent.epsilon:.3f}")
         self.update()
 
     def auto_play(self):
@@ -376,7 +419,7 @@ class SnakeVisualizer(tk.Tk):
         self.play_btn.config(state='disabled')
         self.update()
 
-        train_agent(self.env, self.agent, episodes=2000)
+        train_agent(self.env, self.agent, episodes=5000)
         torch.save(self.agent.model.state_dict(), MODEL_PATH)
 
         self.play_btn.config(text="▶ Watch AI Play", state='normal')
@@ -395,7 +438,7 @@ if __name__ == "__main__":
         print(f"✓ Loaded model from {MODEL_PATH}")
     else:
         print("No model found. Training from scratch...")
-        train_agent(env, agent, episodes=5000)
+        train_agent(env, agent, episodes=50000)
         torch.save(agent.model.state_dict(), MODEL_PATH)
         print(f"✓ Model saved to {MODEL_PATH}")
 
