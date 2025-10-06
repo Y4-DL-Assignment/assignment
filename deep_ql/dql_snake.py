@@ -10,7 +10,7 @@ import os
 
 # Configuration
 GRID_SIZE = 10
-MODEL_PATH = 'improved_dqn_snake_10x10.pth'
+MODEL_PATH = 'plot_improved_dqn_snake_10x10.pth'
 CELL_SIZE = 40
 
 
@@ -256,45 +256,48 @@ class DQNAgent:
             self.epsilon *= self.epsilon_decay
 
 
-def train_agent(env, agent, episodes=50000):
+def train_agent(training_env, training_agent, episodes=50000):
     scores = []
+    rewards = []      # Collect total reward per episode
+    epsilons = []     # Collect epsilon per episode
     best_score = 0
     moving_avg_window = 100
 
     print(f"Training for {episodes} episodes with improved rewards...")
 
     for episode in range(episodes):
-        state = env.reset()
+        state = training_env.reset()
         total_reward = 0
 
-        while not env.done:
-            action = agent.act(state)
-            next_state, reward, done = env.step(action)
-            agent.remember(state, action, reward, next_state, done)
-            agent.replay()
+        while not training_env.done:
+            action = training_agent.act(state)
+            next_state, reward, done = training_env.step(action)
+            training_agent.remember(state, action, reward, next_state, done)
+            training_agent.replay()
 
             state = next_state
             total_reward += reward
 
-        agent.decay_epsilon()
-        scores.append(env.score)
+        training_agent.decay_epsilon()
+        scores.append(training_env.score)
+        rewards.append(total_reward)      # Add this
+        epsilons.append(training_agent.epsilon)    # Add this
 
-        if env.score > best_score:
-            best_score = env.score
+        if training_env.score > best_score:
+            best_score = training_env.score
 
         if (episode + 1) % 100 == 0:
             avg_score = np.mean(scores[-moving_avg_window:])
             print(f"Episode {episode + 1}/{episodes} | "
-                  f"Score: {env.score} | "
+                  f"Score: {training_env.score} | "
                   f"Avg({moving_avg_window}): {avg_score:.2f} | "
                   f"Best: {best_score} | "
-                  f"ε: {agent.epsilon:.3f}")
+                  f"ε: {training_agent.epsilon:.3f}")
 
     print(f"\nTraining complete! Best score: {best_score}")
     final_avg = np.mean(scores[-100:])
     print(f"Final 100-episode average: {final_avg:.2f}")
-    return scores
-
+    return scores, rewards, epsilons
 
 class SnakeVisualizer(tk.Tk):
     def __init__(self, env, agent):
@@ -509,9 +512,18 @@ if __name__ == "__main__":
         print(f"✓ Loaded model from {MODEL_PATH}")
     else:
         print("No model found. Training from scratch...")
-        train_agent(env, agent, episodes=10000)
+        train_agent(env, agent, episodes=20000)
         torch.save(agent.model.state_dict(), MODEL_PATH)
+        torch.save(agent.model, "./neutron/dqn_snake_full_model.pth")
         print(f"✓ Model saved to {MODEL_PATH}")
+        print("✓ Full model saved to dqn_snake_full_model.pth")
+
+    # Export ONNX model
+    dummy_input = torch.randn(1, 16)
+    torch.onnx.export(agent.model, dummy_input, "./neutron/dqn_snake.onnx",
+                      input_names=["state"], output_names=["Q_values"],
+                      opset_version=12)
+    print("✓ Model exported to dqn_snake.onnx for Netron visualization")
 
     app = SnakeVisualizer(env, agent)
     app.mainloop()
