@@ -1,6 +1,6 @@
 import tkinter as tk
 import logging
-from go_game import GoGame
+from deprected.go_game import GoGame
 
 # Configure logging to both file and console
 logging.basicConfig(
