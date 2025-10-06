@@ -10,7 +10,7 @@ import os
 
 # Configuration
 GRID_SIZE = 10
-MODEL_PATH = 'plot_improved_dqn_snake_10x10.pth'
+MODEL_PATH = 'improved_dqn_snake_10x10.pth'
 CELL_SIZE = 40
 
 
