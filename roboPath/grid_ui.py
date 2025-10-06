@@ -495,7 +495,7 @@ def run_grid_ui():
                         
                         training_thread = threading.Thread(
                             target=run_training_thread,
-                            args=(5000,),
+                            args=(30000,),
                             daemon=True
                         )
                         training_thread.start()
