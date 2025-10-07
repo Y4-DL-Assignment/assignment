@@ -5,6 +5,7 @@ import torch.optim as optim
 from collections import deque
 import random
 import tkinter as tk
+import tkinter.messagebox
 import os
 
 # Configuration
@@ -30,12 +31,22 @@ class SnakeGame:
         self.prev_distance = self._get_distance_to_food()
         return self.get_state()
 
-    def _place_food(self):
+    def _place_food(self, manual_position=None):
+        if manual_position is not None:
+            if manual_position not in self.snake:
+                return manual_position
         while True:
             food = (random.randint(0, self.grid_size - 1),
                     random.randint(0, self.grid_size - 1))
             if food not in self.snake:
                 return food
+
+    def place_food_at(self, position):
+        """Manually place food at a specific position"""
+        if position not in self.snake:
+            self.food = position
+            return True
+        return False
 
     def _get_distance_to_food(self):
         """Manhattan distance to food"""
@@ -245,56 +256,69 @@ class DQNAgent:
             self.epsilon *= self.epsilon_decay
 
 
-def train_agent(env, agent, episodes=50000):
+def train_agent(training_env, training_agent, episodes=50000):
     scores = []
+    rewards = []      # Collect total reward per episode
+    epsilons = []     # Collect epsilon per episode
     best_score = 0
     moving_avg_window = 100
 
     print(f"Training for {episodes} episodes with improved rewards...")
 
     for episode in range(episodes):
-        state = env.reset()
+        state = training_env.reset()
         total_reward = 0
 
-        while not env.done:
-            action = agent.act(state)
-            next_state, reward, done = env.step(action)
-            agent.remember(state, action, reward, next_state, done)
-            agent.replay()
+        while not training_env.done:
+            action = training_agent.act(state)
+            next_state, reward, done = training_env.step(action)
+            training_agent.remember(state, action, reward, next_state, done)
+            training_agent.replay()
 
             state = next_state
             total_reward += reward
 
-        agent.decay_epsilon()
-        scores.append(env.score)
+        training_agent.decay_epsilon()
+        scores.append(training_env.score)
+        rewards.append(total_reward)      # Add this
+        epsilons.append(training_agent.epsilon)    # Add this
 
-        if env.score > best_score:
-            best_score = env.score
+        if training_env.score > best_score:
+            best_score = training_env.score
 
         if (episode + 1) % 100 == 0:
             avg_score = np.mean(scores[-moving_avg_window:])
             print(f"Episode {episode + 1}/{episodes} | "
-                  f"Score: {env.score} | "
+                  f"Score: {training_env.score} | "
                   f"Avg({moving_avg_window}): {avg_score:.2f} | "
                   f"Best: {best_score} | "
-                  f"ε: {agent.epsilon:.3f}")
+                  f"ε: {training_agent.epsilon:.3f}")
 
     print(f"\nTraining complete! Best score: {best_score}")
     final_avg = np.mean(scores[-100:])
     print(f"Final 100-episode average: {final_avg:.2f}")
-    return scores
-
+    return scores, rewards, epsilons
 
 class SnakeVisualizer(tk.Tk):
     def __init__(self, env, agent):
         super().__init__()
         self.env = env
         self.agent = agent
-        self.title("Snake Game - Improved DQN")
+        self.title("Snake Game - DQN")
+        self.manual_food_mode = False
+
+        # Score limit dropdown
+        self.score_limit_var = tk.IntVar(value=10)
+        score_limits = [i for i in range(5, 51, 5)]
+        score_limit_frame = tk.Frame(self)
+        score_limit_frame.pack(pady=5)
+        tk.Label(score_limit_frame, text="Winning Score Limit:").pack(side=tk.LEFT)
+        tk.OptionMenu(score_limit_frame, self.score_limit_var, *score_limits).pack(side=tk.LEFT)
 
         self.canvas = tk.Canvas(self, width=env.grid_size * CELL_SIZE,
                                 height=env.grid_size * CELL_SIZE, bg='black')
         self.canvas.pack()
+        self.canvas.bind("<Button-1>", self.on_canvas_click)
 
         self.info_frame = tk.Frame(self)
         self.info_frame.pack(pady=10)
@@ -323,6 +347,11 @@ class SnakeVisualizer(tk.Tk):
                                    command=self.reset_game, font=("Arial", 11))
         self.reset_btn.pack(side=tk.LEFT, padx=5)
 
+        self.food_mode_btn = tk.Button(btn_frame, text="🍎 Manual Food: OFF",
+                                       command=self.toggle_food_mode, font=("Arial", 11),
+                                       bg="lightgray")
+        self.food_mode_btn.pack(side=tk.LEFT, padx=5)
+
         self.retrain_btn = tk.Button(btn_frame, text="🎓 Train More",
                                      command=self.retrain, font=("Arial", 11))
         self.retrain_btn.pack(side=tk.LEFT, padx=5)
@@ -334,8 +363,41 @@ class SnakeVisualizer(tk.Tk):
         tk.Scale(speed_frame, from_=10, to=500, orient=tk.HORIZONTAL,
                  variable=self.speed_var, length=200).pack(side=tk.LEFT)
 
+        self.mode_label = tk.Label(self, text="Click grid to place food (Manual Food mode)",
+                                   font=("Arial", 10), fg="gray")
+        self.mode_label.pack()
+        self.mode_label.pack_forget()  # Hide initially
+
         self.playing = False
         self.draw_game()
+
+    def toggle_food_mode(self):
+        self.manual_food_mode = not self.manual_food_mode
+        if self.manual_food_mode:
+            self.food_mode_btn.config(text="🍎 Manual Food: ON", bg="lightgreen")
+            self.mode_label.pack()
+        else:
+            self.food_mode_btn.config(text="🍎 Manual Food: OFF", bg="lightgray")
+            self.mode_label.pack_forget()
+
+    def on_canvas_click(self, event):
+        col = event.x // CELL_SIZE
+        row = event.y // CELL_SIZE
+
+        if row >= self.env.grid_size or col >= self.env.grid_size or row < 0 or col < 0:
+            return
+
+        if self.manual_food_mode:
+            # Place food at clicked location
+            position = (row, col)
+            if self.env.place_food_at(position):
+                self.draw_game()
+                print(f"Food placed at: ({row}, {col})")
+            else:
+                print(f"Cannot place food at ({row}, {col}) - snake is there!")
+        else:
+            # Ignore clicks when not in manual food mode
+            pass
 
     def draw_game(self):
         self.canvas.delete("all")
@@ -399,6 +461,18 @@ class SnakeVisualizer(tk.Tk):
                 self.high_score_label.config(text=f"Best: {self.high_score}")
             return
 
+        # Check for winning score limit
+        if self.env.score >= self.score_limit_var.get():
+            self.env.done = True
+            self.draw_game()
+            tk.messagebox.showinfo("Game Over", f"Game finished (Score: {self.env.score})")
+            self.playing = False
+            self.play_btn.config(text="▶ Watch AI Play")
+            if self.env.score > self.high_score:
+                self.high_score = self.env.score
+                self.high_score_label.config(text=f"Best: {self.high_score}")
+            return
+
         state = self.env.get_state()
         action = self.agent.act(state, training=False)
         self.env.step(action)
@@ -438,9 +512,18 @@ if __name__ == "__main__":
         print(f"✓ Loaded model from {MODEL_PATH}")
     else:
         print("No model found. Training from scratch...")
-        train_agent(env, agent, episodes=50000)
+        train_agent(env, agent, episodes=20000)
         torch.save(agent.model.state_dict(), MODEL_PATH)
+        torch.save(agent.model, "./neutron/dqn_snake_full_model.pth")
         print(f"✓ Model saved to {MODEL_PATH}")
+        print("✓ Full model saved to dqn_snake_full_model.pth")
+
+    # Export ONNX model
+    dummy_input = torch.randn(1, 16)
+    torch.onnx.export(agent.model, dummy_input, "./neutron/dqn_snake.onnx",
+                      input_names=["state"], output_names=["Q_values"],
+                      opset_version=12)
+    print("✓ Model exported to dqn_snake.onnx for Netron visualization")
 
     app = SnakeVisualizer(env, agent)
     app.mainloop()
