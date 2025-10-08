@@ -1,2 +1,3 @@
 .idea
-go_game.log
+deprected/go_game.log
+.DS_Store
