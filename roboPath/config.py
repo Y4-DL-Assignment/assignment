@@ -8,7 +8,8 @@ ENV_CONFIG = {
     'grid_size': 10,
     'max_steps': 1000,
     'use_obstacles': True,
-    'fixed_start': True
+    'fixed_start': True,
+    'obstacle_move_freq': 3 #TRY WITH 5
 }
 
 # Agent Parameters
@@ -18,7 +19,7 @@ AGENT_CONFIG = {
     'lr': 0.001,
     'gamma': 0.95,
     'buffer_capacity': 100000,
-    'batch_size': 128,
+    'batch_size': 128, 
     'tau': 0.005
 }
 
@@ -26,16 +27,16 @@ AGENT_CONFIG = {
 NETWORK_CONFIG = {
     'input_dim': 20,
     'output_dim': 4,
-    'hidden_dim': 256
+    'hidden_dim': 256 #TRY WITH 512
 }
 
 # Training Parameters
 TRAINING_CONFIG = {
-    'episodes': 10000,
+    'episodes': 9500,
     'start_epsilon': 1.0,
     'end_epsilon': 0.01,
-    'epsilon_decay': 0.9995,
-    'print_freq': 500,
+    'epsilon_decay': 0.9995, #0.9997
+    'print_freq': 100,
     'save_path': 'trained_gridworld_dqn.pth'
 }
 
