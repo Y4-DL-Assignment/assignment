@@ -11,7 +11,7 @@ import os
 # CONFIGURATION
 # =====================
 GRID_SIZE = 10
-MODEL_PATH = 'deep_sarsa_snake_optimized_20000_10x10.pth'
+MODEL_PATH = 'deep_sarsa_snake_optimized_25000_10x10.pth'
 CELL_SIZE = 40
 
 
@@ -368,6 +368,8 @@ class SARSAAgent:
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
         self.optimizer.step()
 
+        return loss
+
     def decay_epsilon(self):
         """Gradually reduce ε for less exploration over time."""
         if self.epsilon > self.epsilon_min:
@@ -381,6 +383,8 @@ def train_agent_sarsa(env, agent, episodes=25000):
     scores = []
     rewards = []
     epsilons = []
+    losses = []
+    # episode_losses = []
     best_score = 0
     moving_avg_window = 100
 
@@ -394,28 +398,34 @@ def train_agent_sarsa(env, agent, episodes=25000):
         while not env.done:
             next_state, reward, done = env.step(action)
             next_action = agent.act(next_state, training=True) if not done else 0
-            agent.learn(state, action, reward, next_state, next_action, done)
+            loss = agent.learn(state, action, reward, next_state, next_action, done)
+            # episode_losses.append(loss.item())
+            losses.append(loss.item())
             state, action = next_state, next_action
             total_reward += reward
 
         agent.decay_epsilon()
         scores.append(env.score)
+        # losses.append(np.mean(episode_losses))
         rewards.append(total_reward)
         epsilons.append(agent.epsilon)
+
 
         if env.score > best_score:
             best_score = env.score
 
         if (episode + 1) % 100 == 0:
             avg_score = np.mean(scores[-moving_avg_window:])
+            avg_loss = np.mean(losses[-moving_avg_window:]) if len(losses) >= moving_avg_window else np.mean(losses)
             print(f"Episode {episode + 1}/{episodes} | "
                   f"Score: {env.score} | Avg(100): {avg_score:.2f} | "
-                  f"Best: {best_score} | ε: {agent.epsilon:.3f}")
+                  f"Best: {best_score} | ε: {agent.epsilon:.3f} | "
+                  f"Avg Loss: {avg_loss:.4f}")
 
     print(f"\n✅ Training complete! Best score: {best_score}")
     final_avg = np.mean(scores[-100:]) if len(scores) >= 100 else np.mean(scores)
     print(f"Final 100-episode average: {final_avg:.2f}")
-    return scores, rewards, epsilons
+    return scores, rewards, epsilons, losses
 
 class SnakeVisualizer(tk.Tk):
     def __init__(self, env, agent):
