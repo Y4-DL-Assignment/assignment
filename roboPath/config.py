@@ -35,8 +35,8 @@ TRAINING_CONFIG = {
     'episodes': 9500,
     'start_epsilon': 1.0,
     'end_epsilon': 0.01,
-    'epsilon_decay': 0.9995, #0.9997
-    'print_freq': 100,
+    'epsilon_decay': 0.9995, #0.9997 with this decay is slower, with 0.9995 is faster
+    'print_freq': 500,
     'save_path': 'trained_gridworld_dqn.pth'
 }
 
