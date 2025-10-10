@@ -14,138 +14,6 @@ GRID_SIZE = 10
 MODEL_PATH = 'deep_sarsa_snake_optimized_25000_10x10.pth'
 CELL_SIZE = 40
 
-
-# =====================
-# ENVIRONMENT
-# =====================
-# class SnakeGame:
-#     def __init__(self, grid_size=GRID_SIZE):
-#         self.grid_size = grid_size
-#         self.reset()
-
-#     def reset(self):
-#         """Reset game to starting state."""
-#         center = self.grid_size // 2
-#         self.snake = [(center, center), (center, center - 1), (center, center - 2)]
-#         self.direction = (0, 1)  # start moving right
-#         self.food = self._place_food()
-#         self.score = 0
-#         self.steps_without_food = 0
-#         self.done = False
-#         self.prev_distance = self._get_distance_to_food()
-#         return self.get_state()
-
-#     def _place_food(self):
-#         """Place food randomly on empty cell."""
-#         while True:
-#             food = (random.randint(0, self.grid_size - 1),
-#                     random.randint(0, self.grid_size - 1))
-#             if food not in self.snake:
-#                 return food
-
-#     def _get_distance_to_food(self):
-#         """Manhattan distance between snake head and food."""
-#         head = self.snake[0]
-#         return abs(head[0] - self.food[0]) + abs(head[1] - self.food[1])
-
-#     def get_state(self):
-#         """Return 16-dimensional state representation."""
-#         head = self.snake[0]
-#         # Danger detection in 8 directions
-#         danger_up = self._is_collision((head[0] - 1, head[1]))
-#         danger_down = self._is_collision((head[0] + 1, head[1]))
-#         danger_left = self._is_collision((head[0], head[1] - 1))
-#         danger_right = self._is_collision((head[0], head[1] + 1))
-#         danger_up_left = self._is_collision((head[0] - 1, head[1] - 1))
-#         danger_up_right = self._is_collision((head[0] - 1, head[1] + 1))
-#         danger_down_left = self._is_collision((head[0] + 1, head[1] - 1))
-#         danger_down_right = self._is_collision((head[0] + 1, head[1] + 1))
-
-#         # Current direction
-#         dir_up = (self.direction == (-1, 0))
-#         dir_down = (self.direction == (1, 0))
-#         dir_left = (self.direction == (0, -1))
-#         dir_right = (self.direction == (0, 1))
-
-#         # Food position relative to head
-#         food_up = (self.food[0] < head[0])
-#         food_down = (self.food[0] > head[0])
-#         food_left = (self.food[1] < head[1])
-#         food_right = (self.food[1] > head[1])
-
-#         state = [
-#             danger_up, danger_down, danger_left, danger_right,
-#             danger_up_left, danger_up_right, danger_down_left, danger_down_right,
-#             dir_up, dir_down, dir_left, dir_right,
-#             food_up, food_down, food_left, food_right
-#         ]
-
-#         return np.array(state, dtype=np.float32)
-
-#     def _turn_right(self, direction):
-#         return (direction[1], -direction[0])
-
-#     def _turn_left(self, direction):
-#         return (-direction[1], direction[0])
-
-#     def _is_collision(self, pos):
-#         """Detect wall or self-collision."""
-#         row, col = pos
-#         if row < 0 or row >= self.grid_size or col < 0 or col >= self.grid_size:
-#             return True
-#         if pos in self.snake:
-#             return True
-#         return False
-
-#     def step(self, action):
-#         """Perform one action step and return (next_state, reward, done)."""
-#         # 0=straight, 1=right, 2=left
-#         if action == 1:
-#             self.direction = self._turn_right(self.direction)
-#         elif action == 2:
-#             self.direction = self._turn_left(self.direction)
-
-#         head = self.snake[0]
-#         new_head = (head[0] + self.direction[0], head[1] + self.direction[1])
-
-#         # If hit wall or self → big negative reward
-#         if self._is_collision(new_head):
-#             self.done = True
-#             return self.get_state(), -10, True
-
-#         # Move snake
-#         self.snake.insert(0, new_head)
-#         current_distance = self._get_distance_to_food()
-
-#         # Initialize reward
-#         reward = 0.0
-
-#         # Reward shaping: stronger move-toward-food reward
-#         if new_head == self.food:
-#             self.score += 1
-#             reward = 12  # higher reward for food
-#             self.food = self._place_food()
-#             self.steps_without_food = 0
-#             self.prev_distance = self._get_distance_to_food()
-#         else:
-#             self.snake.pop()  # remove tail segment
-#             if current_distance < self.prev_distance:
-#                 reward = 2  # move closer
-#             else:
-#                 reward = -1  # move away
-#             self.prev_distance = current_distance
-#             self.steps_without_food += 1
-
-#         # Small survival reward (encourage not dying)
-#         reward += 0.05
-
-#         # End episode if snake takes too long
-#         if self.steps_without_food > 100 * self.grid_size:
-#             self.done = True
-#             reward = -10
-
-#         return self.get_state(), reward, self.done
-
 # =====================
 # ENVIRONMENT
 # =====================
@@ -307,9 +175,9 @@ class SnakeGame:
 # =====================
 # Q-NETWORK (Bigger capacity for better learning)
 # =====================
-class DQN(nn.Module):
+class D_SARSA(nn.Module):
     def __init__(self, input_size=16, hidden1=512, hidden2=512, hidden3=256, output_size=3):
-        super(DQN, self).__init__()
+        super(D_SARSA, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden1)
         self.fc2 = nn.Linear(hidden1, hidden2)
         self.fc3 = nn.Linear(hidden2, hidden3)
@@ -338,7 +206,7 @@ class SARSAAgent:
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = epsilon_min
 
-        self.model = DQN(state_size, 512, 512, 256, action_size)
+        self.model = D_SARSA(state_size, 512, 512, 256, action_size)
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         self.criterion = nn.SmoothL1Loss()
 
@@ -422,7 +290,7 @@ def train_agent_sarsa(env, agent, episodes=25000):
                   f"Best: {best_score} | ε: {agent.epsilon:.3f} | "
                   f"Avg Loss: {avg_loss:.4f}")
 
-    print(f"\n✅ Training complete! Best score: {best_score}")
+    print(f"\n Training complete! Best score: {best_score}")
     final_avg = np.mean(scores[-100:]) if len(scores) >= 100 else np.mean(scores)
     print(f"Final 100-episode average: {final_avg:.2f}")
     return scores, rewards, epsilons, losses
@@ -626,7 +494,7 @@ class SnakeVisualizer(tk.Tk):
 
         self.play_btn.config(text="▶ Watch AI Play", state='normal')
         self.reset_game()
-        print("✓ Model retrained and saved!")
+        print("Model retrained and saved!")
 
 # =====================
 # MAIN
@@ -638,12 +506,12 @@ if __name__ == "__main__":
     if os.path.exists(MODEL_PATH):
         agent.model.load_state_dict(torch.load(MODEL_PATH))
         agent.epsilon = 0.01
-        print(f"✓ Loaded trained Deep SARSA model from {MODEL_PATH}")
+        print(f"Loaded trained Deep SARSA model from {MODEL_PATH}")
     else:
-        print("🚀 No model found — training Deep SARSA from scratch...")
+        print("No model found — training Deep SARSA from scratch...")
         train_agent_sarsa(env, agent, episodes=25000)
         torch.save(agent.model.state_dict(), MODEL_PATH)
-        print(f"✓ Model saved to {MODEL_PATH}")
+        print(f"Model saved to {MODEL_PATH}")
 
     app = SnakeVisualizer(env, agent)
     app.mainloop()
