@@ -249,7 +249,7 @@ class SARSAAgent:
 # =====================
 # TRAINING LOOP
 # =====================
-def train_agent_sarsa(env, agent, episodes=25000):
+def train_agent_sarsa(env, agent, episodes=20000):
     scores = []
     rewards = []
     epsilons = []
@@ -511,7 +511,7 @@ if __name__ == "__main__":
         print(f"Loaded trained Deep SARSA model from {MODEL_PATH}")
     else:
         print("No model found — training Deep SARSA from scratch...")
-        train_agent_sarsa(env, agent, episodes=25000)
+        train_agent_sarsa(env, agent, episodes=20000)
         torch.save(agent.model.state_dict(), MODEL_PATH)
         print(f"Model saved to {MODEL_PATH}")
 
