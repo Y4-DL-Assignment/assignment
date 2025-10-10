@@ -219,7 +219,7 @@ class DQNAgent:
 
     def replay(self, batch_size=128):
         if len(self.memory) < batch_size:
-            return
+            return None
 
         minibatch = random.sample(self.memory, batch_size)
 
@@ -250,6 +250,8 @@ class DQNAgent:
         self.update_counter += 1
         if self.update_counter % 500 == 0:
             self.update_target_network()
+
+        return loss  # Return the loss value
 
     def decay_epsilon(self):
         if self.epsilon > self.epsilon_min:
