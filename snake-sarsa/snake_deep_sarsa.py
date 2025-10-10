@@ -11,7 +11,7 @@ import os
 # CONFIGURATION
 # =====================
 GRID_SIZE = 10
-MODEL_PATH = 'deep_sarsa_snake_optimized_25000_10x10.pth'
+MODEL_PATH = 'deep_sarsa_snake_optimized_20000_10x10.pth'
 CELL_SIZE = 40
 
 # =====================
@@ -224,8 +224,10 @@ class SARSAAgent:
         state_t = torch.FloatTensor(state).unsqueeze(0)
         next_state_t = torch.FloatTensor(next_state).unsqueeze(0)
 
+        # Q-value prediction for the current (state, action)
         q_pred = self.model(state_t)[0, action]
 
+        # Compute target using the *actual next action* taken
         with torch.no_grad():
             q_next = self.model(next_state_t)[0, next_action] if not done else torch.tensor(0.0)
             target = reward + self.gamma * q_next
