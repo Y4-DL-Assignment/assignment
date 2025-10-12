@@ -1,4 +1,4 @@
-# 🧠 Reinforcement Learning — Snake Game 🐍
+#  Reinforcement Learning — Snake Game
 
 This repository contains **two deep reinforcement learning projects** that teach an AI to play the classic **Snake game** using:
 
@@ -14,7 +14,7 @@ Each project includes:
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 ASSIGNMENT/
@@ -31,12 +31,12 @@ ASSIGNMENT/
 │
 ├── notebooks/                # Shared experiment notebooks
 ├── .venv/                    # Optional virtual environmen
-└── README.md                 # 👈 this file
+└── README.md                 # this file
 ```
 
 ---
 
-## ⚙️ Requirements
+##  Requirements
 
 Both projects use **Python** and **PyTorch**.
 
@@ -66,17 +66,17 @@ sudo apt-get install -y python3-tk
 
 ---
 
-## 🧠 Project A — Deep Q-Learning (DQN)
+##  Project A — Deep Q-Learning (DQN)
 
 **Location:** `deep_ql/dql_snake.py`
 
-### 📌 What it does
+###  What it does
 
 * Implements a **DQN agent** with **Double DQN** updates and a **target network**.
 * Uses experience replay (buffer size = 100,000) and mini-batches to stabilize training.
 * Supports ONNX export for visualization in [Netron](https://netron.app).
 
-### 🏋️ Train the Agent
+###  Train the Agent
 
 From the root folder:
 
@@ -91,30 +91,30 @@ If no trained model is found, it trains for `20,000` episodes by default, then s
 * `neutron/dqn_snake_full_model.pth` — full model
 * `neutron/dqn_snake.onnx` — ONNX export
 
-### 🎮 Watch the Agent
+###  Watch the Agent
 
 After training, a **Tkinter GUI** opens where you can:
 
-* ▶ **Watch AI Play**
-* 🔄 **Reset**
-* 🍎 **Toggle manual food mode** (click grid to place food)
-* 🎓 **Retrain** (extra 5,000 episodes)
-* 🐢 Speed slider (10–500 ms delay)
+*  **Watch AI Play**
+*  **Reset**
+*  **Toggle manual food mode** (click grid to place food)
+*  **Retrain** (extra 5,000 episodes)
+*  Speed slider (10–500 ms delay)
 
 ---
 
-## 🧠 Project B — Deep SARSA
+##  Project B — Deep SARSA
 
 **Location:** `snake-sarsa/snake_deep_sarsa.py`
 
-### 📌 What it does
+###  What it does
 
 * Implements a **SARSA agent** with a **deep neural network** instead of a Q-table.
 * Trains with **on-policy updates** (Q(s,a) → Q(s′,a′)), no replay buffer or target net.
 * Uses richer state features (danger in 8 directions, food direction, movement direction).
 * GUI similar to the DQN project.
 
-### 🏋️ Train the Agent
+###  Train the Agent
 
 From the root folder:
 
@@ -125,19 +125,19 @@ python snake_deep_sarsa.py
 
 If no trained model is found, it trains for `25,000` episodes and saves weights automatically.
 
-### 🎮 Watch the Agent
+###  Watch the Agent
 
 Same GUI controls as the DQN project:
 
-* ▶ Watch AI Play
-* 🔄 Reset
-* 🍎 Manual Food Mode
-* 🎓 Train More
-* 🐢 Speed control
+*  Watch AI Play
+*  Reset
+*  Manual Food Mode
+*  Train More
+*  Speed control
 
 ---
 
-## 📊 State & Action Representation
+##  State & Action Representation
 
 | Feature                 | Count | Description                                    |
 | ----------------------- | ----- | ---------------------------------------------- |
@@ -154,7 +154,7 @@ Same GUI controls as the DQN project:
 
 ---
 
-## 🏅 Reward Structure (Both)
+##  Reward Structure (Both)
 
 | Event               | Reward                  |
 | ------------------- | ----------------------- |
@@ -167,7 +167,7 @@ Same GUI controls as the DQN project:
 
 ---
 
-## 🧪 Common Troubleshooting
+##  Common Troubleshooting
 
 | Issue                                          | Solution                                                                               |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -179,7 +179,7 @@ Same GUI controls as the DQN project:
 
 ---
 
-## 📡 Export (DQN only)
+##  Export (DQN only)
 
 The DQN project automatically exports to ONNX:
 
@@ -191,13 +191,13 @@ You can open this file in [https://netron.app](https://netron.app) to explore th
 
 ---
 
-## 📝 License
+##  License
 
 Specify your license here (MIT, Apache-2.0, etc.).
 
 ---
 
-## 🙌 Credits
+##  Credits
 
 * **Deep Q-Learning Implementation** — based on standard Double DQN with replay buffer
 * **Deep SARSA Implementation** — on-policy deep RL adapted for Snake
