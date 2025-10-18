@@ -131,8 +131,6 @@ class AcademicNetworkVisualizer(tk.Tk):
         status_frame.pack(side=tk.RIGHT, padx=12)
         self.model_status_lbl = tk.Label(status_frame, text="Model: (none)", bg="#1a1a1a", fg="#bfeec9", font=("Helvetica", 9))
         self.model_status_lbl.pack(side=tk.LEFT, padx=(0,8))
-        load_btn = tk.Button(status_frame, text="Load Model...", command=self._on_load_model, bg="#2d7a2d", fg='white')
-        load_btn.pack(side=tk.LEFT)
         if self.model_loaded and self.model_path:
             self.model_status_lbl.config(text=f"Model: {os.path.basename(self.model_path)}")
 
@@ -294,27 +292,13 @@ class AcademicNetworkVisualizer(tk.Tk):
         btn_frame = tk.Frame(controls, bg="#f5f5f5")
         btn_frame.pack(side=tk.LEFT)
 
-        sample_btn = tk.Button(
-            btn_frame,
-            text="Generate Sample State",
-            command=self._generate_sample_state,
-            font=("Helvetica", 10),
-            bg="#0066cc",
-            fg="white",
-            padx=15,
-            pady=8,
-            relief=tk.RAISED,
-            bd=2
-        )
-        sample_btn.pack(side=tk.LEFT, padx=5)
-
         random_btn = tk.Button(
             btn_frame,
             text="Random Input",
             command=self._generate_random_state,
             font=("Helvetica", 10),
             bg="#666666",
-            fg="white",
+            fg="black",
             padx=15,
             pady=8,
             relief=tk.RAISED,
