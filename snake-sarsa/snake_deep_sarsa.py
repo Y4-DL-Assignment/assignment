@@ -14,6 +14,7 @@ GRID_SIZE = 10
 MODEL_PATH = 'deep_sarsa_snake_optimized_20000_10x10.pth'
 CELL_SIZE = 40
 
+
 # =====================
 # ENVIRONMENT
 # =====================
@@ -23,7 +24,6 @@ class SnakeGame:
         self.reset()
 
     def reset(self):
-        # Snake starts in center
         center = self.grid_size // 2
         self.snake = [(center, center), (center, center - 1), (center, center - 2)]
         self.direction = (0, 1)  # Moving right
@@ -143,7 +143,7 @@ class SnakeGame:
         # Eat food?
         if new_head == self.food:
             self.score += 1
-            reward = 12  # DQL value
+            reward = 12
             self.food = self._place_food()
             self.steps_without_food = 0
             self.prev_distance = self._get_distance_to_food()
@@ -151,7 +151,7 @@ class SnakeGame:
             # Move tail
             self.snake.pop()
 
-            # Shaping: closer = +2, away = -1 (DQL)
+            # Shaping: closer = +2, away = -1
             if current_distance < self.prev_distance:
                 reward = 2
             else:
@@ -160,10 +160,10 @@ class SnakeGame:
             self.prev_distance = current_distance
             self.steps_without_food += 1
 
-        # Small survival reward (encourage not dying)
+        # Small survival reward
         reward += 0.05
 
-        # Timeout -> end (DQL)
+        # Timeout -> end
         if self.steps_without_food > 100 * self.grid_size:
             self.done = True
             reward = -10
@@ -171,9 +171,8 @@ class SnakeGame:
         return self.get_state(), reward, self.done
 
 
-
 # =====================
-# Q-NETWORK (Bigger capacity for better learning)
+# Q-NETWORK
 # =====================
 class D_SARSA(nn.Module):
     def __init__(self, input_size=16, hidden1=512, hidden2=512, hidden3=256, output_size=3):
@@ -182,7 +181,7 @@ class D_SARSA(nn.Module):
         self.fc2 = nn.Linear(hidden1, hidden2)
         self.fc3 = nn.Linear(hidden2, hidden3)
         self.fc4 = nn.Linear(hidden3, output_size)
-        self.dropout = nn.Dropout(0.05)  # slightly less dropout to retain info
+        self.dropout = nn.Dropout(0.05)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
@@ -214,6 +213,7 @@ class SARSAAgent:
         """Choose action using ε-greedy policy."""
         if training and np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
+
         state_tensor = torch.FloatTensor(state).unsqueeze(0)
         with torch.no_grad():
             q_values = self.model(state_tensor)
@@ -227,7 +227,7 @@ class SARSAAgent:
         # Q-value prediction for the current (state, action)
         q_pred = self.model(state_t)[0, action]
 
-        # Compute target using the *actual next action* taken
+        # Compute target using the actual next action taken
         with torch.no_grad():
             q_next = self.model(next_state_t)[0, next_action] if not done else torch.tensor(0.0)
             target = reward + self.gamma * q_next
@@ -254,7 +254,6 @@ def train_agent_sarsa(env, agent, episodes=20000):
     rewards = []
     epsilons = []
     losses = []
-    # episode_losses = []
     best_score = 0
     moving_avg_window = 100
 
@@ -269,107 +268,227 @@ def train_agent_sarsa(env, agent, episodes=20000):
             next_state, reward, done = env.step(action)
             next_action = agent.act(next_state, training=True) if not done else 0
             loss = agent.learn(state, action, reward, next_state, next_action, done)
-            # episode_losses.append(loss.item())
             losses.append(loss.item())
             state, action = next_state, next_action
             total_reward += reward
 
         agent.decay_epsilon()
         scores.append(env.score)
-        # losses.append(np.mean(episode_losses))
         rewards.append(total_reward)
         epsilons.append(agent.epsilon)
-
 
         if env.score > best_score:
             best_score = env.score
 
         if (episode + 1) % 100 == 0:
             avg_score = np.mean(scores[-moving_avg_window:])
-            avg_loss = np.mean(losses[-moving_avg_window:]) if len(losses) >= moving_avg_window else np.mean(losses)
+            avg_loss = (np.mean(losses[-moving_avg_window:])
+                       if len(losses) >= moving_avg_window
+                       else np.mean(losses))
             print(f"Episode {episode + 1}/{episodes} | "
                   f"Score: {env.score} | Avg(100): {avg_score:.2f} | "
                   f"Best: {best_score} | ε: {agent.epsilon:.3f} | "
                   f"Avg Loss: {avg_loss:.4f}")
 
-    print(f"\n Training complete! Best score: {best_score}")
+    print(f"\nTraining complete! Best score: {best_score}")
     final_avg = np.mean(scores[-100:]) if len(scores) >= 100 else np.mean(scores)
     print(f"Final 100-episode average: {final_avg:.2f}")
     return scores, rewards, epsilons, losses
 
+
+# =====================
+# GUI VISUALIZER
+# =====================
 class SnakeVisualizer(tk.Tk):
     def __init__(self, env, agent):
         super().__init__()
         self.env = env
         self.agent = agent
-        self.title("Snake Game - Deep SARSA (DQL Style)")
+        self.title("Snake Game - Deep SARSA")
         self.manual_food_mode = False
+        self.playing = False
+        self.high_score = 0
 
-        # ---- Winning Score Limit Dropdown ----
-        self.score_limit_var = tk.IntVar(value=10)
-        score_limits = [i for i in range(5, 51, 5)]
-        score_limit_frame = tk.Frame(self)
-        score_limit_frame.pack(pady=5)
-        tk.Label(score_limit_frame, text="Winning Score Limit:").pack(side=tk.LEFT)
-        tk.OptionMenu(score_limit_frame, self.score_limit_var, *score_limits).pack(side=tk.LEFT)
-
-        # ---- Canvas ----
-        self.canvas = tk.Canvas(self, width=env.grid_size * CELL_SIZE,
-                                height=env.grid_size * CELL_SIZE, bg='black')
+        # Canvas
+        self.canvas = tk.Canvas(
+            self,
+            width=env.grid_size * CELL_SIZE,
+            height=env.grid_size * CELL_SIZE,
+            bg='black'
+        )
         self.canvas.pack()
         self.canvas.bind("<Button-1>", self.on_canvas_click)
 
-        # ---- Info bar ----
+        # Info frame
         self.info_frame = tk.Frame(self)
         self.info_frame.pack(pady=10)
-        self.score_label = tk.Label(self.info_frame, text="Score: 0", font=("Arial", 14, "bold"))
-        self.score_label.pack(side=tk.LEFT, padx=10)
 
-        self.high_score = 0
-        self.high_score_label = tk.Label(self.info_frame, text="Best: 0", font=("Arial", 14))
-        self.high_score_label.pack(side=tk.LEFT, padx=10)
+        self.score_label = tk.Label(
+            self.info_frame,
+            text="Score: 0",
+            font=("Arial", 14, "bold")
+        )
+        self.score_label.pack(side="left", padx=10)
 
-        self.epsilon_label = tk.Label(self.info_frame, text=f"ε: {agent.epsilon:.3f}", font=("Arial", 12))
-        self.epsilon_label.pack(side=tk.LEFT, padx=10)
+        self.high_score_label = tk.Label(
+            self.info_frame,
+            text=f"Best: {self.high_score}",
+            font=("Arial", 14, "bold")
+        )
+        self.high_score_label.pack(side="left", padx=10)
 
-        # ---- Buttons ----
-        btn_frame = tk.Frame(self)
-        btn_frame.pack()
-        self.play_btn = tk.Button(btn_frame, text="▶ Watch AI Play", command=self.auto_play, font=("Arial", 11))
-        self.play_btn.pack(side=tk.LEFT, padx=5)
+        # Input features frame
+        self.state_frame = tk.LabelFrame(
+            self,
+            text='Input Features (16)',
+            font=("Arial", 10, "bold")
+        )
+        self.state_frame.pack(pady=6, padx=10)
 
-        self.reset_btn = tk.Button(btn_frame, text="🔄 Reset", command=self.reset_game, font=("Arial", 11))
-        self.reset_btn.pack(side=tk.LEFT, padx=5)
+        self.state_labels = []
+        feature_descriptions = [
+            "Danger Up", "Danger Down", "Danger Left", "Danger Right",
+            "Danger Up-Left", "Danger Up-Right", "Danger Down-Left", "Danger Down-Right",
+            "Direction Up", "Direction Down", "Direction Left", "Direction Right",
+            "Food Up", "Food Down", "Food Left", "Food Right"
+        ]
 
-        self.food_mode_btn = tk.Button(btn_frame, text="🍎 Manual Food: OFF",
-                                       command=self.toggle_food_mode, font=("Arial", 11),
-                                       bg="lightgray")
-        self.food_mode_btn.pack(side=tk.LEFT, padx=5)
+        for i in range(4):
+            for j in range(4):
+                idx = i * 4 + j
+                if idx >= len(feature_descriptions):
+                    break
+                description = feature_descriptions[idx]
+                lbl = tk.Label(
+                    self.state_frame,
+                    text=f'{idx:02d} ({description}): 0',
+                    width=35,
+                    anchor='w',
+                    font=("Courier", 10)
+                )
+                lbl.grid(row=i, column=j, padx=2, pady=2)
+                self.state_labels.append(lbl)
 
-        self.retrain_btn = tk.Button(btn_frame, text="🎓 Train More", command=self.retrain, font=("Arial", 11))
-        self.retrain_btn.pack(side=tk.LEFT, padx=5)
+        # Output frame
+        self.output_frame = tk.LabelFrame(
+            self,
+            text='Agent Decision',
+            font=("Arial", 10, "bold")
+        )
+        self.output_frame.pack(pady=6, padx=10)
 
-        # ---- Speed Control ----
-        self.speed_var = tk.IntVar(value=100)
-        speed_frame = tk.Frame(self)
-        speed_frame.pack()
-        tk.Label(speed_frame, text="Speed:").pack(side=tk.LEFT)
-        tk.Scale(speed_frame, from_=10, to=500, orient=tk.HORIZONTAL,
-                 variable=self.speed_var, length=200).pack(side=tk.LEFT)
+        self.q_value_labels = []
+        self.action_names = ['Straight', 'Turn Right', 'Turn Left']
 
-        # ---- Mode label ----
-        self.mode_label = tk.Label(self, text="Click grid to place food (Manual Food mode)",
-                                   font=("Arial", 10), fg="gray")
-        self.mode_label.pack()
-        self.mode_label.pack_forget()  # hide initially
+        for action_name in self.action_names:
+            ql = tk.Label(
+                self.output_frame,
+                text=f'{action_name}: 0.00',
+                width=20,
+                anchor='w',
+                font=("Courier", 11)
+            )
+            ql.pack(padx=4, pady=2)
+            self.q_value_labels.append(ql)
 
-        self.playing = False
+        self.decision_label = tk.Label(
+            self.output_frame,
+            text='Choice: -',
+            font=("Arial", 12, "bold")
+        )
+        self.decision_label.pack(pady=(6, 2))
+
+        self.direction_label = tk.Label(
+            self.output_frame,
+            text='Direction: -',
+            font=("Arial", 12)
+        )
+        self.direction_label.pack()
+
+        # Control frame
+        self.control_frame = tk.Frame(self)
+        self.control_frame.pack(pady=10)
+
+        self.play_btn = tk.Button(
+            self.control_frame,
+            text="▶ Watch AI Play",
+            font=("Arial", 12),
+            command=self.auto_play,
+            bg="lightgray"
+        )
+        self.play_btn.pack(side="left", padx=5)
+
+        self.reset_btn = tk.Button(
+            self.control_frame,
+            text="🔄 Reset Game",
+            font=("Arial", 12),
+            command=self.reset_game,
+            bg="lightgray"
+        )
+        self.reset_btn.pack(side="left", padx=5)
+
+        self.retrain_btn = tk.Button(
+            self.control_frame,
+            text="🔧 Retrain Model",
+            font=("Arial", 12),
+            command=self.retrain,
+            bg="lightgray"
+        )
+        self.retrain_btn.pack(side="left", padx=5)
+
+        # Speed control
+        self.speed_var = tk.IntVar(value=250)
+        self.speed_scale = tk.Scale(
+            self.control_frame,
+            from_=10,
+            to=500,
+            resolution=10,
+            orient="horizontal",
+            label="Speed (ms)",
+            variable=self.speed_var,
+            font=("Arial", 10)
+        )
+        self.speed_scale.pack(side="left", padx=5)
+
+        # Score limit
+        self.score_limit_var = tk.IntVar(value=10)
+        self.score_limit_label = tk.Label(
+            self.control_frame,
+            text="Score Limit:",
+            font=("Arial", 10)
+        )
+        self.score_limit_label.pack(side="left", padx=5)
+
+        self.score_limit_entry = tk.Entry(
+            self.control_frame,
+            textvariable=self.score_limit_var,
+            width=5,
+            font=("Arial", 10)
+        )
+        self.score_limit_entry.pack(side="left", padx=5)
+
+        # Food mode button
+        self.food_mode_btn = tk.Button(
+            self.control_frame,
+            text="🍎 Manual Food: OFF",
+            font=("Arial", 11),
+            command=self.toggle_food_mode,
+            bg="lightgray"
+        )
+        self.food_mode_btn.pack(side="left", padx=5)
+
+        self.mode_label = tk.Label(
+            self,
+            text="Click grid to place food (Manual Food mode)",
+            font=("Arial", 10),
+            fg="gray"
+        )
+        self.mode_label.pack_forget()
+
         self.draw_game()
 
-    # ----------------------------------------
-    # Manual Food Mode controls
-    # ----------------------------------------
     def toggle_food_mode(self):
+        """Toggle manual food placement mode."""
         self.manual_food_mode = not self.manual_food_mode
         if self.manual_food_mode:
             self.food_mode_btn.config(text="🍎 Manual Food: ON", bg="lightgreen")
@@ -382,6 +501,7 @@ class SnakeVisualizer(tk.Tk):
         """Handle manual food placement."""
         col = event.x // CELL_SIZE
         row = event.y // CELL_SIZE
+
         if row >= self.env.grid_size or col >= self.env.grid_size or row < 0 or col < 0:
             return
 
@@ -393,49 +513,92 @@ class SnakeVisualizer(tk.Tk):
             else:
                 print(f"Cannot place food at ({row}, {col}) - snake is there!")
 
-    # ----------------------------------------
-    # Rendering logic
-    # ----------------------------------------
     def draw_game(self):
-        """Draw grid, snake, and food."""
+        """Render game state to canvas."""
         self.canvas.delete("all")
 
-        # Grid
+        # Draw grid
         for i in range(self.env.grid_size + 1):
-            self.canvas.create_line(0, i * CELL_SIZE,
-                                    self.env.grid_size * CELL_SIZE, i * CELL_SIZE,
-                                    fill='#222222')
-            self.canvas.create_line(i * CELL_SIZE, 0,
-                                    i * CELL_SIZE, self.env.grid_size * CELL_SIZE,
-                                    fill='#222222')
+            self.canvas.create_line(
+                0, i * CELL_SIZE,
+                self.env.grid_size * CELL_SIZE, i * CELL_SIZE,
+                fill='#222222'
+            )
+            self.canvas.create_line(
+                i * CELL_SIZE, 0,
+                i * CELL_SIZE, self.env.grid_size * CELL_SIZE,
+                fill='#222222'
+            )
 
-        # Snake
+        # Draw snake
         for i, (row, col) in enumerate(self.env.snake):
-            x1, y1 = col * CELL_SIZE, row * CELL_SIZE
-            x2, y2 = x1 + CELL_SIZE, y1 + CELL_SIZE
-            if i == 0:
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill="#00ff00", outline="#00cc00", width=2)
-                eye_size = 4
-                self.canvas.create_oval(x1 + 10, y1 + 10, x1 + 10 + eye_size, y1 + 10 + eye_size, fill='black')
-                self.canvas.create_oval(x2 - 14, y1 + 10, x2 - 14 + eye_size, y1 + 10 + eye_size, fill='black')
-            else:
-                self.canvas.create_rectangle(x1 + 2, y1 + 2, x2 - 2, y2 - 2, fill="#00cc00", outline="#008800")
+            x1 = col * CELL_SIZE
+            y1 = row * CELL_SIZE
+            x2 = x1 + CELL_SIZE
+            y2 = y1 + CELL_SIZE
 
-        # Food
+            if i == 0:
+                self.canvas.create_rectangle(
+                    x1, y1, x2, y2,
+                    fill="#00ff00",
+                    outline="#00cc00",
+                    width=2
+                )
+            else:
+                self.canvas.create_rectangle(
+                    x1 + 2, y1 + 2, x2 - 2, y2 - 2,
+                    fill="#00cc00",
+                    outline="#008800"
+                )
+
+        # Draw food
         food_row, food_col = self.env.food
-        x1, y1 = food_col * CELL_SIZE, food_row * CELL_SIZE
-        x2, y2 = x1 + CELL_SIZE, y1 + CELL_SIZE
-        self.canvas.create_oval(x1 + 5, y1 + 5, x2 - 5, y2 - 5, fill="red", outline="darkred", width=2)
+        x1 = food_col * CELL_SIZE
+        y1 = food_row * CELL_SIZE
+        x2 = x1 + CELL_SIZE
+        y2 = y1 + CELL_SIZE
+        self.canvas.create_oval(
+            x1 + 5, y1 + 5, x2 - 5, y2 - 5,
+            fill="red",
+            outline="darkred",
+            width=2
+        )
+
+        # Update state display
+        state = self.env.get_state()
+        for i, lbl in enumerate(self.state_labels):
+            val = int(state[i]) if i < len(state) else 0
+            lbl.config(text=f'{i:02d}: {val}')
+
+        # Get Q-values
+        q_values = None
+        try:
+            with torch.no_grad():
+                q_tensor = self.agent.model(torch.FloatTensor(state).unsqueeze(0))
+            q_values = q_tensor.squeeze().cpu().numpy()
+        except Exception:
+            q_values = np.zeros(len(self.q_value_labels), dtype=float)
+
+        # Update Q-value display
+        best_idx = int(np.argmax(q_values)) if q_values is not None else 0
+        for i, ql in enumerate(self.q_value_labels):
+            ql.config(text=f'{self.action_names[i]}: {q_values[i]:+.2f}')
+            if i == best_idx:
+                ql.config(bg='#fff7cc', fg='black')
+            else:
+                ql.config(bg=self.output_frame.cget('bg'), fg='#666666')
+
+        # Update decision labels
+        self.decision_label.config(text=f'Choice: {self.action_names[best_idx]}')
+        dir_map = {(-1, 0): 'UP', (1, 0): 'DOWN', (0, -1): 'LEFT', (0, 1): 'RIGHT'}
+        dir_str = dir_map.get(self.env.direction, str(self.env.direction))
+        self.direction_label.config(text=f'Direction: {dir_str}')
 
         self.score_label.config(text=f"Score: {self.env.score}")
-        self.epsilon_label.config(text=f"ε: {self.agent.epsilon:.3f}")
         self.update()
 
-    # ----------------------------------------
-    # Control Buttons
-    # ----------------------------------------
     def auto_play(self):
-        """AI play toggle."""
+        """Toggle AI play mode."""
         if self.playing:
             self.playing = False
             self.play_btn.config(text="▶ Watch AI Play")
@@ -447,7 +610,7 @@ class SnakeVisualizer(tk.Tk):
         self.run_episode()
 
     def run_episode(self):
-        """AI step loop."""
+        """Execute one step of gameplay."""
         if not self.playing or self.env.done:
             self.playing = False
             self.play_btn.config(text="▶ Watch AI Play")
@@ -456,11 +619,14 @@ class SnakeVisualizer(tk.Tk):
                 self.high_score_label.config(text=f"Best: {self.high_score}")
             return
 
-        # Stop if winning limit reached
+        # Check winning condition
         if self.env.score >= self.score_limit_var.get():
             self.env.done = True
             self.draw_game()
-            tk.messagebox.showinfo("Game Over", f"Game finished (Score: {self.env.score})")
+            tk.messagebox.showinfo(
+                "Game Over",
+                f"Game finished (Score: {self.env.score})"
+            )
             self.playing = False
             self.play_btn.config(text="▶ Watch AI Play")
             if self.env.score > self.high_score:
@@ -478,14 +644,14 @@ class SnakeVisualizer(tk.Tk):
         self.after(delay, self.run_episode)
 
     def reset_game(self):
-        """Reset board."""
+        """Reset the game."""
         self.playing = False
         self.play_btn.config(text="▶ Watch AI Play")
         self.env.reset()
         self.draw_game()
 
     def retrain(self):
-        """Continue training."""
+        """Continue training the model."""
         self.playing = False
         self.play_btn.config(text="Training...")
         self.play_btn.config(state='disabled')
@@ -497,6 +663,7 @@ class SnakeVisualizer(tk.Tk):
         self.play_btn.config(text="▶ Watch AI Play", state='normal')
         self.reset_game()
         print("Model retrained and saved!")
+
 
 # =====================
 # MAIN
@@ -517,4 +684,3 @@ if __name__ == "__main__":
 
     app = SnakeVisualizer(env, agent)
     app.mainloop()
-
