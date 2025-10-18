@@ -309,6 +309,14 @@ class SnakeVisualizer(tk.Tk):
         self.playing = False
         self.high_score = 0
 
+        # Score limit dropdown (moved to top)
+        self.score_limit_var = tk.IntVar(value=10)
+        score_limits = [i for i in range(5, 51, 5)]
+        score_limit_frame = tk.Frame(self)
+        score_limit_frame.pack(pady=5)
+        tk.Label(score_limit_frame, text="Winning Score Limit:").pack(side=tk.LEFT)
+        tk.OptionMenu(score_limit_frame, self.score_limit_var, *score_limits).pack(side=tk.LEFT)
+
         # Canvas
         self.canvas = tk.Canvas(
             self,
@@ -319,7 +327,7 @@ class SnakeVisualizer(tk.Tk):
         self.canvas.pack()
         self.canvas.bind("<Button-1>", self.on_canvas_click)
 
-        # Info frame
+        # Info frame with epsilon
         self.info_frame = tk.Frame(self)
         self.info_frame.pack(pady=10)
 
@@ -328,41 +336,43 @@ class SnakeVisualizer(tk.Tk):
             text="Score: 0",
             font=("Arial", 14, "bold")
         )
-        self.score_label.pack(side="left", padx=10)
+        self.score_label.pack(side=tk.LEFT, padx=10)
 
         self.high_score_label = tk.Label(
             self.info_frame,
             text=f"Best: {self.high_score}",
-            font=("Arial", 14, "bold")
+            font=("Arial", 14)
         )
-        self.high_score_label.pack(side="left", padx=10)
+        self.high_score_label.pack(side=tk.LEFT, padx=10)
 
-        # Input features frame
+        # Add epsilon display
+        self.epsilon_label = tk.Label(
+            self.info_frame,
+            text=f"ε: {agent.epsilon:.3f}",
+            font=("Arial", 12)
+        )
+        self.epsilon_label.pack(side=tk.LEFT, padx=10)
+
+        # Features and output in horizontal layout
+        features_frame = tk.Frame(self)
+        features_frame.pack(pady=6)
+
+        # Input features frame - 4x4 grid
         self.state_frame = tk.LabelFrame(
-            self,
+            features_frame,
             text='Input Features (16)',
             font=("Arial", 10, "bold")
         )
-        self.state_frame.pack(pady=6, padx=10)
+        self.state_frame.pack(side=tk.LEFT, padx=8)
 
         self.state_labels = []
-        feature_descriptions = [
-            "Danger Up", "Danger Down", "Danger Left", "Danger Right",
-            "Danger Up-Left", "Danger Up-Right", "Danger Down-Left", "Danger Down-Right",
-            "Direction Up", "Direction Down", "Direction Left", "Direction Right",
-            "Food Up", "Food Down", "Food Left", "Food Right"
-        ]
-
         for i in range(4):
             for j in range(4):
                 idx = i * 4 + j
-                if idx >= len(feature_descriptions):
-                    break
-                description = feature_descriptions[idx]
                 lbl = tk.Label(
                     self.state_frame,
-                    text=f'{idx:02d} ({description}): 0',
-                    width=35,
+                    text=f'{idx:02d}: 0',
+                    width=12,
                     anchor='w',
                     font=("Courier", 10)
                 )
@@ -371,11 +381,11 @@ class SnakeVisualizer(tk.Tk):
 
         # Output frame
         self.output_frame = tk.LabelFrame(
-            self,
+            features_frame,
             text='Agent Decision',
             font=("Arial", 10, "bold")
         )
-        self.output_frame.pack(pady=6, padx=10)
+        self.output_frame.pack(side=tk.LEFT, padx=8)
 
         self.q_value_labels = []
         self.action_names = ['Straight', 'Turn Right', 'Turn Left']
@@ -405,85 +415,66 @@ class SnakeVisualizer(tk.Tk):
         )
         self.direction_label.pack()
 
-        # Control frame
-        self.control_frame = tk.Frame(self)
-        self.control_frame.pack(pady=10)
+        # Control buttons
+        btn_frame = tk.Frame(self)
+        btn_frame.pack()
 
         self.play_btn = tk.Button(
-            self.control_frame,
+            btn_frame,
             text="▶ Watch AI Play",
-            font=("Arial", 12),
             command=self.auto_play,
-            bg="lightgray"
+            font=("Arial", 11)
         )
-        self.play_btn.pack(side="left", padx=5)
+        self.play_btn.pack(side=tk.LEFT, padx=5)
 
         self.reset_btn = tk.Button(
-            self.control_frame,
-            text="🔄 Reset Game",
-            font=("Arial", 12),
+            btn_frame,
+            text="🔄 Reset",
             command=self.reset_game,
+            font=("Arial", 11)
+        )
+        self.reset_btn.pack(side=tk.LEFT, padx=5)
+
+        self.food_mode_btn = tk.Button(
+            btn_frame,
+            text="🍎 Manual Food: OFF",
+            command=self.toggle_food_mode,
+            font=("Arial", 11),
             bg="lightgray"
         )
-        self.reset_btn.pack(side="left", padx=5)
+        self.food_mode_btn.pack(side=tk.LEFT, padx=5)
 
         self.retrain_btn = tk.Button(
-            self.control_frame,
-            text="🔧 Retrain Model",
-            font=("Arial", 12),
+            btn_frame,
+            text="🎓 Train More",
             command=self.retrain,
-            bg="lightgray"
+            font=("Arial", 11)
         )
-        self.retrain_btn.pack(side="left", padx=5)
+        self.retrain_btn.pack(side=tk.LEFT, padx=5)
 
         # Speed control
-        self.speed_var = tk.IntVar(value=250)
-        self.speed_scale = tk.Scale(
-            self.control_frame,
+        self.speed_var = tk.IntVar(value=100)
+        speed_frame = tk.Frame(self)
+        speed_frame.pack()
+        tk.Label(speed_frame, text="Speed:").pack(side=tk.LEFT)
+        tk.Scale(
+            speed_frame,
             from_=10,
             to=500,
-            resolution=10,
-            orient="horizontal",
-            label="Speed (ms)",
+            orient=tk.HORIZONTAL,
             variable=self.speed_var,
-            font=("Arial", 10)
-        )
-        self.speed_scale.pack(side="left", padx=5)
+            length=200
+        ).pack(side=tk.LEFT)
 
-        # Score limit
-        self.score_limit_var = tk.IntVar(value=10)
-        self.score_limit_label = tk.Label(
-            self.control_frame,
-            text="Score Limit:",
-            font=("Arial", 10)
-        )
-        self.score_limit_label.pack(side="left", padx=5)
-
-        self.score_limit_entry = tk.Entry(
-            self.control_frame,
-            textvariable=self.score_limit_var,
-            width=5,
-            font=("Arial", 10)
-        )
-        self.score_limit_entry.pack(side="left", padx=5)
-
-        # Food mode button
-        self.food_mode_btn = tk.Button(
-            self.control_frame,
-            text="🍎 Manual Food: OFF",
-            font=("Arial", 11),
-            command=self.toggle_food_mode,
-            bg="lightgray"
-        )
-        self.food_mode_btn.pack(side="left", padx=5)
-
+        # Mode label
         self.mode_label = tk.Label(
             self,
             text="Click grid to place food (Manual Food mode)",
             font=("Arial", 10),
             fg="gray"
         )
-        self.mode_label.pack_forget()
+        self.mode_label.pack()
+        self.mode_label.pack_forget()  # Hide initially
 
         self.draw_game()
 
@@ -530,7 +521,7 @@ class SnakeVisualizer(tk.Tk):
                 fill='#222222'
             )
 
-        # Draw snake
+        # Draw snake with eyes on head
         for i, (row, col) in enumerate(self.env.snake):
             x1 = col * CELL_SIZE
             y1 = row * CELL_SIZE
@@ -538,13 +529,27 @@ class SnakeVisualizer(tk.Tk):
             y2 = y1 + CELL_SIZE
 
             if i == 0:
+                # Head - brighter with eyes
                 self.canvas.create_rectangle(
                     x1, y1, x2, y2,
                     fill="#00ff00",
                     outline="#00cc00",
                     width=2
                 )
+                # Eyes
+                eye_size = 4
+                self.canvas.create_oval(
+                    x1 + 10, y1 + 10,
+                    x1 + 10 + eye_size, y1 + 10 + eye_size,
+                    fill='black'
+                )
+                self.canvas.create_oval(
+                    x2 - 14, y1 + 10,
+                    x2 - 14 + eye_size, y1 + 10 + eye_size,
+                    fill='black'
+                )
             else:
+                # Body
                 self.canvas.create_rectangle(
                     x1 + 2, y1 + 2, x2 - 2, y2 - 2,
                     fill="#00cc00",
@@ -564,11 +569,14 @@ class SnakeVisualizer(tk.Tk):
             width=2
         )
 
-        # Update state display
+        # Update state display with color coding
         state = self.env.get_state()
         for i, lbl in enumerate(self.state_labels):
             val = int(state[i]) if i < len(state) else 0
-            lbl.config(text=f'{i:02d}: {val}')
+            lbl.config(
+                text=f'{i:02d}: {val}',
+                fg='#006400' if val else '#444444'
+            )
 
         # Get Q-values
         q_values = None
@@ -579,7 +587,7 @@ class SnakeVisualizer(tk.Tk):
         except Exception:
             q_values = np.zeros(len(self.q_value_labels), dtype=float)
 
-        # Update Q-value display
+        # Update Q-value display with highlighting
         best_idx = int(np.argmax(q_values)) if q_values is not None else 0
         for i, ql in enumerate(self.q_value_labels):
             ql.config(text=f'{self.action_names[i]}: {q_values[i]:+.2f}')
@@ -595,6 +603,7 @@ class SnakeVisualizer(tk.Tk):
         self.direction_label.config(text=f'Direction: {dir_str}')
 
         self.score_label.config(text=f"Score: {self.env.score}")
+        self.epsilon_label.config(text=f"ε: {self.agent.epsilon:.3f}")
         self.update()
 
     def auto_play(self):
@@ -662,7 +671,7 @@ class SnakeVisualizer(tk.Tk):
 
         self.play_btn.config(text="▶ Watch AI Play", state='normal')
         self.reset_game()
-        print("Model retrained and saved!")
+        print("✓ Model saved!")
 
 
 # =====================
