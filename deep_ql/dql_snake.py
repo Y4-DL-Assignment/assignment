@@ -163,6 +163,9 @@ class SnakeGame:
 
         return self.get_state(), reward, self.done
 
+# ========================================================================
+# Model and Training - Start
+# ========================================================================
 
 class DQN(nn.Module):
     def __init__(self, input_size=16, hidden_size=256, output_size=3):
@@ -232,7 +235,7 @@ class DQNAgent:
         # Current Q values
         current_q = self.model(states).gather(1, actions.unsqueeze(1)).squeeze()
 
-        # Double DQN: use main network to select action, target network to evaluate
+        # Double DQN: use main network to select action, target network to evaluate - Bellman
         with torch.no_grad():
             next_actions = self.model(next_states).max(1)[1]
             next_q = self.target_model(next_states).gather(1, next_actions.unsqueeze(1)).squeeze()
@@ -260,8 +263,8 @@ class DQNAgent:
 
 def train_agent(training_env, training_agent, episodes=50000):
     scores = []
-    rewards = []      # Collect total reward per episode
-    epsilons = []     # Collect epsilon per episode
+    rewards = [] # Collect total reward per episode
+    epsilons = [] # Collect epsilon per episode
     best_score = 0
     moving_avg_window = 100
 
@@ -282,8 +285,8 @@ def train_agent(training_env, training_agent, episodes=50000):
 
         training_agent.decay_epsilon()
         scores.append(training_env.score)
-        rewards.append(total_reward)      # Add this
-        epsilons.append(training_agent.epsilon)    # Add this
+        rewards.append(total_reward)
+        epsilons.append(training_agent.epsilon)
 
         if training_env.score > best_score:
             best_score = training_env.score
@@ -300,6 +303,10 @@ def train_agent(training_env, training_agent, episodes=50000):
     final_avg = np.mean(scores[-100:])
     print(f"Final 100-episode average: {final_avg:.2f}")
     return scores, rewards, epsilons
+
+# ========================================================================
+# Model and Training - End
+# ========================================================================
 
 class SnakeVisualizer(tk.Tk):
     def __init__(self, env, agent):
@@ -487,7 +494,7 @@ class SnakeVisualizer(tk.Tk):
         try:
             with torch.no_grad():
                 q_tensor = self.agent.model(torch.FloatTensor(state).unsqueeze(0))
-            q_values = q_tensor.squeeze().cpu().numpy()
+            q_values = q_tensor.squeeze().cuda().numpy()
         except Exception:
             # fallback: zero values
             q_values = np.zeros(3, dtype=float)
