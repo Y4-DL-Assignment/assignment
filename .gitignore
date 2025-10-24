@@ -1,3 +1,4 @@
 .idea
 deprected/go_game.log
 .DS_Store
+.venv

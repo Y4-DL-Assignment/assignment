@@ -335,8 +335,40 @@ class SnakeVisualizer(tk.Tk):
         self.high_score_label.pack(side=tk.LEFT, padx=10)
 
         self.epsilon_label = tk.Label(self.info_frame, text=f"ε: {agent.epsilon:.3f}",
-                                      font=("Arial", 12))
+                                       font=("Arial", 12))
         self.epsilon_label.pack(side=tk.LEFT, padx=10)
+
+        # --- New: Input features (16) and Output decision widgets ---
+        features_frame = tk.Frame(self)
+        features_frame.pack(pady=6)
+
+        # Input features 4x4 grid
+        self.state_frame = tk.LabelFrame(features_frame, text='Input Features (16)', font=("Arial", 10, "bold"))
+        self.state_frame.pack(side=tk.LEFT, padx=8)
+        self.state_labels = []
+        for i in range(4):
+            for j in range(4):
+                idx = i * 4 + j
+                # Highlight the first input feature label with a brighter green color
+                lbl = tk.Label(self.state_frame, text=f'{idx:02d}: 0', width=12, anchor='w', font=("Courier", 10))
+                lbl.grid(row=i, column=j, padx=2, pady=2)
+                self.state_labels.append(lbl)
+
+        # Output decision panel
+        self.output_frame = tk.LabelFrame(features_frame, text='Agent Decision', font=("Arial", 10, "bold"))
+        self.output_frame.pack(side=tk.LEFT, padx=8)
+        # Q-value labels
+        self.q_value_labels = []
+        action_names = ['Straight', 'Turn Right', 'Turn Left']
+        for a in action_names:
+            ql = tk.Label(self.output_frame, text=f'{a}: 0.00', width=20, anchor='w', font=("Courier", 11))
+            ql.pack(padx=4, pady=2)
+            self.q_value_labels.append(ql)
+        # Chosen action
+        self.decision_label = tk.Label(self.output_frame, text='Choice: -', font=("Arial", 12, "bold"))
+        self.decision_label.pack(pady=(6,2))
+        self.direction_label = tk.Label(self.output_frame, text='Direction: -', font=("Arial", 12))
+        self.direction_label.pack()
 
         btn_frame = tk.Frame(self)
         btn_frame.pack()
@@ -439,6 +471,44 @@ class SnakeVisualizer(tk.Tk):
         y2 = y1 + CELL_SIZE
         self.canvas.create_oval(x1 + 5, y1 + 5, x2 - 5, y2 - 5, fill="red", outline="darkred", width=2)
 
+        # --- New: Update input features and Q-values display ---
+        state = self.env.get_state()
+
+        # Display input features as 0/1
+        for i, lbl in enumerate(self.state_labels):
+            val = int(state[i])
+            lbl.config(text=f'{i:02d}: {val}', fg='#006400' if val else '#444444')
+
+        # Prepare action names locally
+        action_names = ['Straight', 'Turn Right', 'Turn Left']
+
+        # Compute Q-values safely (model may be absent during quick tests)
+        q_values = None
+        try:
+            with torch.no_grad():
+                q_tensor = self.agent.model(torch.FloatTensor(state).unsqueeze(0))
+            q_values = q_tensor.squeeze().cpu().numpy()
+        except Exception:
+            # fallback: zero values
+            q_values = np.zeros(3, dtype=float)
+
+        # Update Q-value labels and highlight the chosen action (selected label in black font)
+        best_idx = int(np.argmax(q_values)) if q_values is not None else 0
+        for i, ql in enumerate(self.q_value_labels):
+            ql.config(text=f'{action_names[i]}: {q_values[i]:+.2f}')
+            # highlight best: light highlight background + black text
+            if i == best_idx:
+                ql.config(bg='#fff7cc', fg='black')
+            else:
+                # non-selected: match output frame bg and use muted gray text
+                ql.config(bg=self.output_frame.cget('bg'), fg='#666666')
+
+        # Update decision labels with chosen action and current direction
+        self.decision_label.config(text=f'Choice: {action_names[best_idx]}')
+        # Human-readable direction
+        dir_map = {(-1, 0): 'UP', (1, 0): 'DOWN', (0, -1): 'LEFT', (0, 1): 'RIGHT'}
+        self.direction_label.config(text=f'Direction: {dir_map.get(self.env.direction, str(self.env.direction))}')
+
         self.score_label.config(text=f"Score: {self.env.score}")
         self.epsilon_label.config(text=f"ε: {self.agent.epsilon:.3f}")
         self.update()
@@ -520,12 +590,15 @@ if __name__ == "__main__":
         print(f"✓ Model saved to {MODEL_PATH}")
         print("✓ Full model saved to dqn_snake_full_model.pth")
 
-    # Export ONNX model
-    dummy_input = torch.randn(1, 16)
-    torch.onnx.export(agent.model, dummy_input, "./neutron/dqn_snake.onnx",
-                      input_names=["state"], output_names=["Q_values"],
-                      opset_version=12)
-    print("✓ Model exported to dqn_snake.onnx for Netron visualization")
+    # Export ONNX model (optional) - guard against missing onnx dependency
+    try:
+        dummy_input = torch.randn(1, 16)
+        torch.onnx.export(agent.model, dummy_input, "./neutron/dqn_snake.onnx",
+                          input_names=["state"], output_names=["Q_values"],
+                          opset_version=12)
+        print("✓ Model exported to dqn_snake.onnx for Netron visualization")
+    except Exception as e:
+        print("ONNX export skipped (optional). Reason:", str(e))
 
     app = SnakeVisualizer(env, agent)
     app.mainloop()
